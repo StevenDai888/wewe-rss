@@ -8,7 +8,7 @@ FROM base AS build
 COPY . /usr/src/app
 WORKDIR /usr/src/app
 
-RUN id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+RUN npm install
 
 RUN pnpm run -r build
 
