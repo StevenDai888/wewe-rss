@@ -1,61 +1,34 @@
-FROM node:20.16.0-alpine AS base
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
+# WeWe RSS - Railway 兼容版
+FROM node:20-alpine
 
-RUN npm i -g pnpm
+# 安装必要的工具
+RUN apk add --no-cache git
 
-FROM base AS build
-COPY . /usr/src/app
-WORKDIR /usr/src/app
+WORKDIR /app
 
-RUN npm install
+# 复制 package 文件
+COPY package*.json pnpm-lock.yaml ./
 
+# 用 pnpm 安装（不使用缓存挂载）
+RUN npm install -g pnpm@9
+RUN pnpm install --no-frozen-lockfile
+
+# 复制所有源码
+COPY . .
+
+# 构建
 RUN pnpm run -r build
 
-RUN pnpm deploy --filter=server --prod /app
-RUN pnpm deploy --filter=server --prod /app-sqlite
+# 只保留 server 生产环境
+RUN pnpm deploy --filter=server --prod /app/prod
 
-RUN cd /app && pnpm exec prisma generate
+WORKDIR /app/prod
+COPY apps/server/src/config/docker.ts ./src/config/docker.ts
 
-RUN cd /app-sqlite && \
-    rm -rf ./prisma && \
-    mv prisma-sqlite prisma && \
-    pnpm exec prisma generate
-
-FROM base AS app-sqlite
-COPY --from=build /app-sqlite /app
-
-WORKDIR /app
-
-EXPOSE 4000
-
-ENV NODE_ENV=production
-ENV HOST="0.0.0.0"
-ENV SERVER_ORIGIN_URL=""
-ENV MAX_REQUEST_PER_MINUTE=60
-ENV AUTH_CODE=""
-ENV DATABASE_URL="file:../data/wewe-rss.db"
+ENV PORT=3333
 ENV DATABASE_TYPE="sqlite"
+ENV DATABASE_URL="file:./data/wewe-rss.db"
+ENV AUTH_CODE="muge2026"
 
-RUN chmod +x ./docker-bootstrap.sh
-
-CMD ["./docker-bootstrap.sh"]
-
-
-FROM base AS app
-COPY --from=build /app /app
-
-WORKDIR /app
-
-EXPOSE 4000
-
-ENV NODE_ENV=production
-ENV HOST="0.0.0.0"
-ENV SERVER_ORIGIN_URL=""
-ENV MAX_REQUEST_PER_MINUTE=60
-ENV AUTH_CODE=""
-ENV DATABASE_URL=""
-
-RUN chmod +x ./docker-bootstrap.sh
-
-CMD ["./docker-bootstrap.sh"]
+EXPOSE 3333
+CMD ["node", "src/main.js"]
